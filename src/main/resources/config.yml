@@ -1,0 +1,27 @@
+# AntiCheat configuration file
+
+# Fly detection threshold in milliseconds
+flyDetectionThreshold: 5000
+
+# Maximum damage per hit for Killaura detection
+maxDamagePerHit: 10.0
+
+# Maximum movement speed (blocks per second)
+maxSpeed: 10.0
+
+# Maximum fall distance before NoFall detection
+maxFallDistance: 10.0
+
+# Maximum number of clicks per second for AutoClicker detection
+maxClicksPerSecond: 15
+
+# Time window to count clicks (milliseconds)
+clickTimeThreshold: 200
+
+# Violation thresholds for actions
+violationThresholds:
+  kick: 5
+  ban: 10
+
+# Notify message sent to admins
+notifyMessage: "&c[AntiCheat] &e%player% &cis suspected of using %reason%."
