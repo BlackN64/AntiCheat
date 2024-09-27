@@ -1,0 +1,24 @@
+name: AntiCheat
+version: 1.0
+main: org.ayosynk.antiCheat.AntiCheat
+api-version: 1.21
+description: A Minecraft AntiCheat plugin for Paper/Spigot servers.
+author: AyoSynk
+commands:
+  anticheat:
+    description: Reload the AntiCheat plugin configuration.
+    usage: /<command> reload
+    permission: anticheat.reload
+    permission-message: You do not have permission to execute this command.
+
+permissions:
+  anticheat.notify:
+    description: Allows users to receive notifications about detected hacks.
+    default: op
+  anticheat.reload:
+    description: Allows users to reload the plugin configuration.
+    default: op
+
+
+# Kick message sent to the player
+kickMessage: "&cYou have been kicked for using hacks!"
