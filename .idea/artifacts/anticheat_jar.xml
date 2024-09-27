@@ -1,8 +1,0 @@
-<component name="ArtifactManager">
-  <artifact type="jar" name="anticheat:jar">
-    <output-path>$PROJECT_DIR$/out/artifacts/anticheat_jar</output-path>
-    <root id="archive" name="anticheat.jar">
-      <element id="module-output" name="anticheat" />
-    </root>
-  </artifact>
-</component>
