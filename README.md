@@ -23,31 +23,50 @@ The AntiCheat plugin for Minecraft is designed to enhance server security by det
 The configuration file allows customization of thresholds and messages. Here’s a brief overview of the configurable options:
 
 ```yaml
-# Fly detection threshold in milliseconds
-flyDetectionThreshold: 5000
+# AntiCheat Configuration File
 
-# Maximum damage per hit for Killaura detection
-maxDamagePerHit: 10.0
+# Anti Speed hack config
+maxSpeed: 0.5 # Maximum speed a player can move (in blocks per second)
 
-# Maximum movement speed (blocks per second)
-maxSpeed: 10.0
+# Anti fly hack config
+flyDetectionThreshold: 2000 # Threshold for fly detection (in milliseconds)
 
-# Maximum fall distance before NoFall detection
-maxFallDistance: 10.0
+#Anti auto-clicker hack config
+clickTimeThreshold: 100  # Time threshold for click detection (in milliseconds)
+maxClicksPerSecond: 10 # Maximum clicks allowed per second
 
-# Maximum number of clicks per second for AutoClicker detection
-maxClicksPerSecond: 15
+# Anti NoFall hack config
+# Maximum fall distance before triggering no-fall detection
+maxFallDistance: 4.0  # Height above which fall damage should occur
+# Minimum damage expected from falls to avoid false positives
+expectedFallDamage: 2.0  # Adjust this based on testing fall damage
+# Time (in milliseconds) to reset no-fall detection (for repeated checks)
+noFallResetTime: 5000  # 5 seconds
 
-# Time window to count clicks (milliseconds)
-clickTimeThreshold: 200
+# XRay Detection config
+xray:
+  timeWindow: 60000  # Time window (in milliseconds) to analyze mining patterns (default: 60 seconds)
+  minDistanceBetweenOres: 5.0  # Minimum distance (in blocks) between mined valuable ores to trigger suspicion
+  maxOresInProximity: 3  # Maximum number of ores mined in close proximity before flagging as suspicious
+  valuableOres:  # List of ores considered valuable for XRay detection
+    - DIAMOND_ORE
+    - EMERALD_ORE
+    - GOLD_ORE
+    - ANCIENT_DEBRIS
+   # you can add more
+
+# Anti Killaura hack config
+killaura:
+  attackSpeedThreshold: 200     # Minimum time between attacks (milliseconds)
+  maxAttackAngle: 60.0          # Maximum allowed attack angle
+  multiHitThreshold: 100        # Time threshold for multiple entity hits (milliseconds)
+  maxReach: 4.0                 # Maximum allowed reach distance (blocks)
+  maxYawDifference: 180.0       # Maximum allowed yaw difference for head movement
 
 # Violation thresholds for actions
 violationThresholds:
-  kick: 5
-  ban: 10
+  kick: 3  # Number of violations before kicking the player
+  ban: 5   # Number of violations before banning the player
 
-# Notify message sent to admins
-notifyMessage: "&c[AntiCheat] &e%player% &cis suspected of using %reason%."
-
-# Kick message sent to the player
-kickMessage: "&cYou have been kicked for using hacks!"
+# Notification message format for admins
+notifyMessage: "&c%player% has been flagged for %reason%"
