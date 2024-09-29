@@ -26,7 +26,13 @@ The configuration file allows customization of thresholds and messages. Here’s
 # AntiCheat Configuration File
 
 # Anti Speed hack config
-maxSpeed: 1.3 # Maximum speed a player can move (in blocks per second)
+movement:
+  # The maximum allowed distance a player can move between checks (default is 7.0 blocks)
+  maxAllowedDistance: 7.0
+  # The minimum time (in milliseconds) allowed between player moves.
+  # This prevents players from moving too quickly in rapid succession (default is 80ms).
+  minTimeBetweenMoves: 80
+
 
 # Anti fly hack config
 flyDetectionThreshold: 5000 # Threshold for fly detection (in milliseconds)
@@ -36,12 +42,10 @@ clickTimeThreshold: 150 #time old for click detection (in milliseconds)
 maxClicksPerSecond: 15 #maximum clicks allowed per second
 
 # Anti NoFall hack config
-# Maximum fall distance before triggering no-fall detection
-maxFallDistance: 6.0  # Height above which fall damage should occur
-# Minimum damage expected from falls to avoid false positives
-expectedFallDamage: 1.0  # Adjust this based on testing fall damage
-# Time (in milliseconds) to reset no-fall detection (for repeated checks)
-noFallResetTime: 3000  # 5 seconds
+# NoFall AntiCheat Configuration
+maxFallDistance: 4.0 # The maximum fall distance a player can fall before triggering NoFall detection.
+noFallResetTime: 5000 # The time after a fall that NoFall detection resets, in milliseconds.
+expectedFallDamage: 2.0 # The expected fall damage when no hacks are being used.
 
 # XRay Detection config
 xray:
@@ -56,12 +60,16 @@ xray:
    #  add more if necessary
 
 # Anti Killaura hack config
+maxDamagePerHit: 10.0 # Maximum damage a player can inflict with a single hit
 killaura:
-  attackSpeedThreshold: 250     # Minimum time between attacks (milliseconds)
-  maxAttackAngle: 90.0          # Maximum allowed attack angle
-  multiHitThreshold: 300        # Time threshold for multiple entity hits (milliseconds)
-  maxReach: 4.6                 # Maximum allowed reach distance (blocks)
-  maxYawDifference: 240.0       # Maximum allowed yaw difference for head movement
+  attackSpeedThreshold: 200 # Threshold for suspicious attack speed (in milliseconds)
+  maxHitsInTimeFrame: 3 # Allowable hits in a timeframe (milliseconds)
+  hitsTimeFrame: 1000 # Timeframe in milliseconds
+  maxAttackAngle: 60.0 # Maximum angle allowed for an attack (in degrees)
+  multiHitThreshold: 100 # Threshold for multi-entity hits (in milliseconds)
+  maxReach: 4.0 # Maximum reach distance for player attacks (in blocks)
+  maxYawDifference: 180.0 # Maximum allowed difference in yaw between attacker and target
+
 
 # Violation thresholds for actions
 violationThresholds:
@@ -70,4 +78,3 @@ violationThresholds:
 
 # Notification message format for admins
 notifyMessage: "&c%player% has been flagged for %reason%"
-

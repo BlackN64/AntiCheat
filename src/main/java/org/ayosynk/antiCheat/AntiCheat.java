@@ -1,5 +1,6 @@
 package org.ayosynk.antiCheat;
 
+import com.comphenix.protocol.PacketType;
 import org.bukkit.*;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -21,8 +22,17 @@ import org.bukkit.enchantments.Enchantment;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
 import org.bukkit.event.block.Action;
+import com.comphenix.protocol.ProtocolLibrary;
+import com.comphenix.protocol.ProtocolManager;
+import com.comphenix.protocol.events.PacketAdapter;
+import com.comphenix.protocol.events.PacketEvent;
+import com.comphenix.protocol.wrappers.WrappedDataWatcher;
+import org.bukkit.Location;
+import org.bukkit.Bukkit;
 
 import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
 
 class ChatUtils {
     // chat colors
@@ -36,23 +46,68 @@ public class AntiCheat extends JavaPlugin implements Listener {
     private FileConfiguration config;
     private HashMap<UUID, Integer> violationLevels = new HashMap<>();
     private HashMap<Player, Long> flyCheck = new HashMap<>();
-    private HashMap<Player, Long> clickCheck = new HashMap<>();
     private HashMap<Player, Integer> clickCount = new HashMap<>();
     private HashMap<Player, Long> lastMove = new HashMap<>();
     private Map<Player, Long> noFallCheck = new HashMap<>();
     private HashMap<UUID, List<MinedBlock>> playerMiningHistory = new HashMap<>();
+    private final Map<Player, Long> clickCheck = new HashMap<>();
+    private final Map<Player, Integer> hitCount = new HashMap<>();
+    private ProtocolManager protocolManager;
+    private final Map<Player, Location> lastPlayerLocation = new HashMap<>();
+    private final Map<Player, Long> playerLastMoveTime = new HashMap<>();
+
+
+    // Configuration variables
+    private double maxDamagePerHit;
+    private int attackSpeedThreshold;
+    private int maxHitsInTimeFrame;
+    private long hitsTimeFrame;
+    private double maxAttackAngle;
+    private long multiHitThreshold;
+    private double maxReach;
+    private double maxYawDifference;
+
 
     @Override
     public void onEnable() {
-        // Load configuration file
-        this.saveDefaultConfig();
-        config = this.getConfig();
+        saveDefaultConfig(); // Saves the default config if it does not exist
+        config = getConfig();
+        loadConfig(); // Load configuration values
+
+        Bukkit.getPluginManager().registerEvents(this, this);
+        protocolManager = ProtocolLibrary.getProtocolManager();
+
+        // Add a packet listener to monitor player interactions
+        protocolManager.addPacketListener(new PacketAdapter(this, PacketType.Play.Client.USE_ENTITY) {
+            @Override
+            public void onPacketReceiving(PacketEvent event) {
+                Player player = event.getPlayer();
+                // Handle entity usage packets for further validation if necessary
+                double x = event.getPacket().getDoubles().read(0);
+                double y = event.getPacket().getDoubles().read(1);
+                double z = event.getPacket().getDoubles().read(2);
+
+                handleMovementCheck(player, x, y, z);
+
+            }
+        });
 
         // Register event listener
         getServer().getPluginManager().registerEvents(this, this);
 
         // Plugin enabled message
         getLogger().info("AntiCheat plugin enabled!");
+    }
+
+    private void loadConfig() {
+        maxDamagePerHit = getConfig().getDouble("maxDamagePerHit", 10.0);
+        attackSpeedThreshold = getConfig().getInt("killaura.attackSpeedThreshold", 200);
+        maxHitsInTimeFrame = getConfig().getInt("maxHitsInTimeFrame", 3);
+        hitsTimeFrame = getConfig().getInt("hitsTimeFrame", 1000);
+        maxAttackAngle = getConfig().getDouble("killaura.maxAttackAngle", 60.0);
+        multiHitThreshold = getConfig().getInt("killaura.multiHitThreshold", 100);
+        maxReach = getConfig().getDouble("killaura.maxReach", 4.0);
+        maxYawDifference = getConfig().getDouble("killaura.maxYawDifference", 180.0);
     }
 
     @Override
@@ -81,36 +136,36 @@ public class AntiCheat extends JavaPlugin implements Listener {
     @EventHandler
     public void onPlayerMove(PlayerMoveEvent event) {
         Player player = event.getPlayer();
-        double distance = event.getFrom().distance(event.getTo());
+        Location oldLocation = event.getFrom();
+        Location newLocation = event.getTo();
+
+        if (newLocation == null || oldLocation == null) {
+            return;
+        }
+
+        // Get values from the config file
+        double maxAllowedDistance = config.getDouble("movement.maxAllowedDistance", 5.0);
+        long minTimeBetweenMoves = config.getLong("movement.minTimeBetweenMoves", 50);
+
+        // Perform movement checks
+        double distance = oldLocation.distance(newLocation);
+        long lastMoveTime = playerLastMoveTime.getOrDefault(player, 0L);
         long currentTime = System.currentTimeMillis();
+        long timeSinceLastMove = currentTime - lastMoveTime;
 
-        // Bypass check for op player, player in creative mode, or player using elytra
-        if (player.isOp() || player.getGameMode() == GameMode.CREATIVE || player.isGliding()) {
-            return; // skip the fly checks for these players
+        // Check if the player is moving too fast
+        if (distance > maxAllowedDistance) {
+            incrementViolation(player, "Suspicious Movement: Exceeding Max Distance");
         }
 
-        // Anti-speed hack detection
-        if (lastMove.containsKey(player) && (currentTime - lastMove.get(player)) < 1000) {
-            double maxSpeed = config.getDouble("maxSpeed", 0.5);
-            if (distance > maxSpeed) {
-                incrementViolation(player, "Speed Hacks Detected");
-            }
+        // Check if the player is moving too frequently
+        if (timeSinceLastMove < minTimeBetweenMoves) {
+            incrementViolation(player, "Suspicious Movement: Moving Too Fast Between Moves");
         }
-        lastMove.put(player, currentTime);
 
-        // Anti-fly hack detection
-        if (!player.isOnGround() && !player.isGliding()) {
-            if (!flyCheck.containsKey(player)) {
-                flyCheck.put(player, System.currentTimeMillis());
-            } else {
-                long lastFlyTime = flyCheck.get(player);
-                if (System.currentTimeMillis() - lastFlyTime > config.getInt("flyDetectionThreshold", 2000)) {
-                    incrementViolation(player, "Fly Hacks Detected");
-                }
-            }
-        } else {
-            flyCheck.remove(player);
-        }
+        // Update last move time and player location
+        lastPlayerLocation.put(player, newLocation);
+        playerLastMoveTime.put(player, currentTime);
     }
 
     // Anti-Killaura Detection
@@ -121,43 +176,87 @@ public class AntiCheat extends JavaPlugin implements Listener {
             Player target = (Player) event.getEntity();
             double damage = event.getDamage();
 
-            // Check for impossible hit rates
-            if (damage > config.getDouble("maxDamagePerHit", 10.0)) {
+            // loasd config
+            double maxDamagePerHit = config.getDouble("Killaura.maxDamagePerHit", 10.0);
+            double maxAttackAngle = config.getDouble("killaura.maxAttackAngle", 60.0);
+            long attackSpeedThreshold = config.getLong("killaura.attackSpeedthreshold", 200);
+            double maxReach = config.getDouble("killaura.maxReach", 4.0);
+            double maxYawDifference = config.getDouble("killaura.maxYawDifference", 180.0);
+            long multiHitThreshold = config.getInt("killaura.multiHitThreshold", 100);
+            // Check for impossible hit rates considering sharpness
+            if (damage > maxDamagePerHit) {
                 incrementViolation(attacker, "Killaura Detected (Excessive Damage)");
             }
 
             // Check for suspicious attack speeds
             long lastAttackTime = clickCheck.getOrDefault(attacker, 0L);
             long currentTime = System.currentTimeMillis();
-            if ((currentTime - lastAttackTime) < config.getInt("killaura.attackSpeedThreshold", 200)) {
+            if ((currentTime - lastAttackTime) < attackSpeedThreshold) {
                 incrementViolation(attacker, "Killaura Detected (Suspicious Attack Speed)");
             }
             clickCheck.put(attacker, currentTime);
 
+            // Count hits to check for spamming
+            hitCount.putIfAbsent(attacker, 0);
+            int hits = hitCount.get(attacker);
+            if ((currentTime - lastAttackTime) <= hitsTimeFrame) {
+                hits++;
+            } else {
+                hits = 1; // Reset the hit count
+            }
+            hitCount.put(attacker, hits);
+
+            // Check if hits exceed the maximum allowed in the timeframe
+            if (hits > maxHitsInTimeFrame) {
+                incrementViolation(attacker, "Killaura Detected (Excessive Hits in Timeframe)");
+            }
+
             // Check for impossible angles of attack
             double angle = attacker.getLocation().getDirection().angle(target.getLocation().getDirection());
-            if (angle > config.getDouble("killaura.maxAttackAngle", 60.0)) {
+            if (angle > maxAttackAngle) {
                 incrementViolation(attacker, "Killaura Detected (Impossible Attack Angle)");
             }
 
             // Check for multi-entity hits (attacking multiple entities at the same time)
-            long multiHitThreshold = config.getInt("killaura.multiHitThreshold", 100);
             if ((currentTime - lastAttackTime) < multiHitThreshold) {
                 incrementViolation(attacker, "Killaura Detected (Multi-Entity Hits)");
             }
 
             // Check for reach
             double reachDistance = attacker.getLocation().distance(target.getLocation());
-            if (reachDistance > config.getDouble("killaura.maxReach", 4.0)) {
+            if (reachDistance > maxReach) {
                 incrementViolation(attacker, "Killaura Detected (Excessive Reach)");
             }
 
             // Abnormal head movement (tracking instantly)
             float yawDifference = Math.abs(attacker.getLocation().getYaw() - target.getLocation().getYaw());
-            if (yawDifference > config.getDouble("killaura.maxYawDifference", 180.0)) {
+            if (yawDifference > maxYawDifference) {
                 incrementViolation(attacker, "Killaura Detected (Abnormal Head Movement)");
             }
+
+            // Monitor packet data for additional checks
+            WrappedDataWatcher watcher = new WrappedDataWatcher(attacker);
+            // Example: Check if the player is not moving or moving in an unrealistic way
+            // Add your logic here as needed
         }
+    }
+  //movement
+    private void handleMovementCheck(Player player, double x, double y, double z) {
+        Location lastlocation = lastPlayerLocation.get(player);
+        Location newLocation = new Location(player.getWorld(), x, y, z);
+
+        if (lastlocation != null) {
+            double distance = lastlocation.distance(newLocation);
+            long currentTime = System.currentTimeMillis();
+            long timeElapsed = System.currentTimeMillis() - playerLastMoveTime.getOrDefault(player, System.currentTimeMillis());
+
+            if (distance > config.getDouble("maxAllowedDistance", 5.0) && timeElapsed < 50) {
+                incrementViolation(player, "Suspicious Movement (Speed/Fly Hack Detected)");
+            }
+        }
+
+        lastPlayerLocation.put(player, newLocation);
+        playerLastMoveTime.put(player, System.currentTimeMillis());
     }
 
     @EventHandler
