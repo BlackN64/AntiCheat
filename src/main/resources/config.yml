@@ -11,12 +11,10 @@ clickTimeThreshold: 150 #time old for click detection (in milliseconds)
 maxClicksPerSecond: 15 #maximum clicks allowed per second
 
 # Anti NoFall hack config
-# Maximum fall distance before triggering no-fall detection
-maxFallDistance: 6.0  # Height above which fall damage should occur
-# Minimum damage expected from falls to avoid false positives
-expectedFallDamage: 1.0  # Adjust this based on testing fall damage
-# Time (in milliseconds) to reset no-fall detection (for repeated checks)
-noFallResetTime: 3000  # 5 seconds
+# NoFall AntiCheat Configuration
+maxFallDistance: 4.0 # The maximum fall distance a player can fall before triggering NoFall detection.
+noFallResetTime: 5000 # The time after a fall that NoFall detection resets, in milliseconds.
+expectedFallDamage: 2.0 # The expected fall damage when no hacks are being used.
 
 # XRay Detection config
 xray:

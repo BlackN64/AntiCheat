@@ -178,49 +178,37 @@ public class AntiCheat extends JavaPlugin implements Listener {
         if (event.getEntity() instanceof Player) {
             Player player = (Player) event.getEntity();
 
-            // Check if the damage is fall damage
+            // Only handle fall damage
             if (event.getCause() == DamageCause.FALL) {
-                double maxFallDistance = config.getDouble("maxFallDistance", 4.0);  // Adjustable in config
-                long fallResetTime = config.getLong("noFallResetTime", 5000);
+                // Detect NoFall based on actual Y-coordinate difference
+                double fallDistance = player.getFallDistance();
+                double expectedDamage = calculateExpectedFallDamage(fallDistance, player);
 
-                // Track fall distance if it exceeds the threshold
-                if (player.getFallDistance() > maxFallDistance) {
-                    // Check if player is wearing Feather Falling boots
-                    if (player.getInventory().getBoots() != null &&
-                            player.getInventory().getBoots().containsEnchantment(Enchantment.FEATHER_FALLING)) {
-                        // Adjust the fall damage expectations based on Feather Falling enchant level
-                        int featherFallLevel = player.getInventory().getBoots().getEnchantmentLevel(Enchantment.FEATHER_FALLING);
-                        double adjustedExpectedDamage = config.getDouble("expectedFallDamage", 2.0) - (featherFallLevel * 0.5);
-                        if (event.getDamage() < adjustedExpectedDamage) {
-                            return; // Legitimate fall, do not flag
-                        }
-                    }
-
-                    // Check if player has Slow Falling potion effect
-                    if (player.hasPotionEffect(PotionEffectType.SLOW_FALLING)) {
-                        return; // Legitimate, do not flag
-                    }
-
-                    // Check if player landed on a special block (slime block, honey block)
-                    Block blockUnderPlayer = player.getLocation().subtract(0, 1, 0).getBlock();
-                    if (blockUnderPlayer.getType() == Material.SLIME_BLOCK || blockUnderPlayer.getType() == Material.HONEY_BLOCK) {
-                        return; // Legitimate, do not flag
-                    }
-
-                    // Check if player takes no or significantly less damage than expected
-                    if (event.getDamage() < config.getDouble("expectedFallDamage", 2.0)) {
-                        // Track the time of the fall and detect NoFall hacks
-                        long lastFallTime = noFallCheck.getOrDefault(player, 0L);
-                        if (System.currentTimeMillis() - lastFallTime > fallResetTime) {
-                            incrementViolation(player, "NoFall Hack Detected (Prevented Fall Damage)");
-                        }
-                    }
-
-                    // Update the time of the fall to prevent repeated violations
-                    noFallCheck.put(player, System.currentTimeMillis());
+                // If the player takes less damage than expected or no damage at all
+                if (event.getDamage() < expectedDamage) {
+                    getLogger().info("NoFall detected for player " + player.getName() + ". Expected damage: " + expectedDamage + ", but took: " + event.getDamage());
+                    incrementViolation(player, "NoFall Hack Detected (Prevented Fall Damage)");
                 }
             }
         }
+    }
+
+    private double calculateExpectedFallDamage(double fallDistance, Player player) {
+        double baseDamage = config.getDouble("expectedFallDamage", 2.0);
+
+        // Adjust for Feather Falling boots
+        if (player.getInventory().getBoots() != null &&
+                player.getInventory().getBoots().containsEnchantment(Enchantment.FEATHER_FALLING)) {
+            int featherFallLevel = player.getInventory().getBoots().getEnchantmentLevel(Enchantment.FEATHER_FALLING);
+            baseDamage -= (featherFallLevel * 0.5);
+        }
+
+        // Adjust for Slow Falling effect
+        if (player.hasPotionEffect(PotionEffectType.SLOW_FALLING)) {
+            return 0.0; // Slow falling negates all fall damage
+        }
+
+        return baseDamage * (fallDistance / config.getDouble("maxFallDistance", 4.0));
     }
 
     // Anti-AutoClicker Detection
