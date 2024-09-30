@@ -1,0 +1,13 @@
+name: AntiCheat
+version: 1.1
+main: org.ayosynk.antiCheat.AntiCheat
+api-version: 1.21
+author: AyoSynk
+commands:
+  anticheat:
+    description: Command to manage AntiCheat settings
+    usage: /<command> <reload>
+    permissions:
+      anticheat.notify:
+        description: allow user to receive message
+        default: true

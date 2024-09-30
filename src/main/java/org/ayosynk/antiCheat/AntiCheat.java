@@ -1,6 +1,6 @@
 package org.ayosynk.antiCheat;
 
-import com.comphenix.protocol.PacketType;
+
 import org.bukkit.*;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -22,12 +22,12 @@ import org.bukkit.enchantments.Enchantment;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
 import org.bukkit.event.block.Action;
-import com.comphenix.protocol.ProtocolLibrary;
-import com.comphenix.protocol.ProtocolManager;
-import com.comphenix.protocol.events.PacketAdapter;
-import com.comphenix.protocol.events.PacketEvent;
-import com.comphenix.protocol.wrappers.WrappedDataWatcher;
 import org.bukkit.Location;
+import org.bukkit.event.entity.EntityResurrectEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.player.PlayerItemHeldEvent;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.Material;
 import org.bukkit.Bukkit;
 
 import java.util.*;
@@ -52,62 +52,24 @@ public class AntiCheat extends JavaPlugin implements Listener {
     private HashMap<UUID, List<MinedBlock>> playerMiningHistory = new HashMap<>();
     private final Map<Player, Long> clickCheck = new HashMap<>();
     private final Map<Player, Integer> hitCount = new HashMap<>();
-    private ProtocolManager protocolManager;
     private final Map<Player, Location> lastPlayerLocation = new HashMap<>();
     private final Map<Player, Long> playerLastMoveTime = new HashMap<>();
-
-
-    // Configuration variables
-    private double maxDamagePerHit;
-    private int attackSpeedThreshold;
-    private int maxHitsInTimeFrame;
-    private long hitsTimeFrame;
-    private double maxAttackAngle;
-    private long multiHitThreshold;
-    private double maxReach;
-    private double maxYawDifference;
+    private Map<Player, Long> lastAttackTime = new HashMap<>();
+    private final HashMap<UUID, Long> lastTotemUse = new HashMap<>();
+    private final HashMap<UUID, Integer> violationCount = new HashMap<>();
 
 
     @Override
     public void onEnable() {
         saveDefaultConfig(); // Saves the default config if it does not exist
         config = getConfig();
-        loadConfig(); // Load configuration values
 
-        Bukkit.getPluginManager().registerEvents(this, this);
-        protocolManager = ProtocolLibrary.getProtocolManager();
-
-        // Add a packet listener to monitor player interactions
-        protocolManager.addPacketListener(new PacketAdapter(this, PacketType.Play.Client.USE_ENTITY) {
-            @Override
-            public void onPacketReceiving(PacketEvent event) {
-                Player player = event.getPlayer();
-                // Handle entity usage packets for further validation if necessary
-                double x = event.getPacket().getDoubles().read(0);
-                double y = event.getPacket().getDoubles().read(1);
-                double z = event.getPacket().getDoubles().read(2);
-
-                handleMovementCheck(player, x, y, z);
-
-            }
-        });
 
         // Register event listener
         getServer().getPluginManager().registerEvents(this, this);
 
         // Plugin enabled message
         getLogger().info("AntiCheat plugin enabled!");
-    }
-
-    private void loadConfig() {
-        maxDamagePerHit = getConfig().getDouble("maxDamagePerHit", 10.0);
-        attackSpeedThreshold = getConfig().getInt("killaura.attackSpeedThreshold", 200);
-        maxHitsInTimeFrame = getConfig().getInt("maxHitsInTimeFrame", 3);
-        hitsTimeFrame = getConfig().getInt("hitsTimeFrame", 1000);
-        maxAttackAngle = getConfig().getDouble("killaura.maxAttackAngle", 60.0);
-        multiHitThreshold = getConfig().getInt("killaura.multiHitThreshold", 100);
-        maxReach = getConfig().getDouble("killaura.maxReach", 4.0);
-        maxYawDifference = getConfig().getDouble("killaura.maxYawDifference", 180.0);
     }
 
     @Override
@@ -132,42 +94,6 @@ public class AntiCheat extends JavaPlugin implements Listener {
         return false;
     }
 
-    // Anti-Fly Detection
-    @EventHandler
-    public void onPlayerMove(PlayerMoveEvent event) {
-        Player player = event.getPlayer();
-        Location oldLocation = event.getFrom();
-        Location newLocation = event.getTo();
-
-        if (newLocation == null || oldLocation == null) {
-            return;
-        }
-
-        // Get values from the config file
-        double maxAllowedDistance = config.getDouble("movement.maxAllowedDistance", 5.0);
-        long minTimeBetweenMoves = config.getLong("movement.minTimeBetweenMoves", 50);
-
-        // Perform movement checks
-        double distance = oldLocation.distance(newLocation);
-        long lastMoveTime = playerLastMoveTime.getOrDefault(player, 0L);
-        long currentTime = System.currentTimeMillis();
-        long timeSinceLastMove = currentTime - lastMoveTime;
-
-        // Check if the player is moving too fast
-        if (distance > maxAllowedDistance) {
-            incrementViolation(player, "Suspicious Movement: Exceeding Max Distance");
-        }
-
-        // Check if the player is moving too frequently
-        if (timeSinceLastMove < minTimeBetweenMoves) {
-            incrementViolation(player, "Suspicious Movement: Moving Too Fast Between Moves");
-        }
-
-        // Update last move time and player location
-        lastPlayerLocation.put(player, newLocation);
-        playerLastMoveTime.put(player, currentTime);
-    }
-
     // Anti-Killaura Detection
     @EventHandler
     public void onPlayerAttack(EntityDamageByEntityEvent event) {
@@ -175,69 +101,52 @@ public class AntiCheat extends JavaPlugin implements Listener {
             Player attacker = (Player) event.getDamager();
             Player target = (Player) event.getEntity();
             double damage = event.getDamage();
+            long currentTime = System.currentTimeMillis();
 
-            // loasd config
-            double maxDamagePerHit = config.getDouble("Killaura.maxDamagePerHit", 10.0);
-            double maxAttackAngle = config.getDouble("killaura.maxAttackAngle", 60.0);
-            long attackSpeedThreshold = config.getLong("killaura.attackSpeedthreshold", 200);
-            double maxReach = config.getDouble("killaura.maxReach", 4.0);
-            double maxYawDifference = config.getDouble("killaura.maxYawDifference", 180.0);
-            long multiHitThreshold = config.getInt("killaura.multiHitThreshold", 100);
-            // Check for impossible hit rates considering sharpness
-            if (damage > maxDamagePerHit) {
+            // Check for excessive damage
+            if (damage > config.getDouble("maxDamagePerHit", 10.0)) {
                 incrementViolation(attacker, "Killaura Detected (Excessive Damage)");
             }
 
             // Check for suspicious attack speeds
-            long lastAttackTime = clickCheck.getOrDefault(attacker, 0L);
-            long currentTime = System.currentTimeMillis();
-            if ((currentTime - lastAttackTime) < attackSpeedThreshold) {
+            long lastAttack = lastAttackTime.getOrDefault(attacker, 0L);
+            if ((currentTime - lastAttack) < config.getInt("killaura.attackSpeedThreshold", 200)) {
                 incrementViolation(attacker, "Killaura Detected (Suspicious Attack Speed)");
             }
-            clickCheck.put(attacker, currentTime);
+            lastAttackTime.put(attacker, currentTime);
 
-            // Count hits to check for spamming
-            hitCount.putIfAbsent(attacker, 0);
-            int hits = hitCount.get(attacker);
-            if ((currentTime - lastAttackTime) <= hitsTimeFrame) {
-                hits++;
-            } else {
-                hits = 1; // Reset the hit count
-            }
+            // Track hits
+            int hits = hitCount.getOrDefault(attacker, 0);
+            hits++;
             hitCount.put(attacker, hits);
-
-            // Check if hits exceed the maximum allowed in the timeframe
-            if (hits > maxHitsInTimeFrame) {
-                incrementViolation(attacker, "Killaura Detected (Excessive Hits in Timeframe)");
-            }
 
             // Check for impossible angles of attack
             double angle = attacker.getLocation().getDirection().angle(target.getLocation().getDirection());
-            if (angle > maxAttackAngle) {
+            if (angle > config.getDouble("killaura.maxAttackAngle", 60.0)) {
                 incrementViolation(attacker, "Killaura Detected (Impossible Attack Angle)");
             }
 
-            // Check for multi-entity hits (attacking multiple entities at the same time)
-            if ((currentTime - lastAttackTime) < multiHitThreshold) {
+            // Check for multi-entity hits
+            if (hits > config.getInt("killaura.multiHitThreshold", 2)) {
                 incrementViolation(attacker, "Killaura Detected (Multi-Entity Hits)");
             }
 
             // Check for reach
             double reachDistance = attacker.getLocation().distance(target.getLocation());
-            if (reachDistance > maxReach) {
+            if (reachDistance > config.getDouble("killaura.maxReach", 4.0)) {
                 incrementViolation(attacker, "Killaura Detected (Excessive Reach)");
             }
 
-            // Abnormal head movement (tracking instantly)
+            // Abnormal head movement
             float yawDifference = Math.abs(attacker.getLocation().getYaw() - target.getLocation().getYaw());
-            if (yawDifference > maxYawDifference) {
+            if (yawDifference > config.getDouble("killaura.maxYawDifference", 180.0)) {
                 incrementViolation(attacker, "Killaura Detected (Abnormal Head Movement)");
             }
 
-            // Monitor packet data for additional checks
-            WrappedDataWatcher watcher = new WrappedDataWatcher(attacker);
-            // Example: Check if the player is not moving or moving in an unrealistic way
-            // Add your logic here as needed
+            // Reset hit count after a certain time frame
+            if (currentTime - lastAttack > 1000) {
+                hitCount.put(attacker, 0);
+            }
         }
     }
   //movement
@@ -309,6 +218,135 @@ public class AntiCheat extends JavaPlugin implements Listener {
 
         return baseDamage * (fallDistance / config.getDouble("maxFallDistance", 4.0));
     }
+
+    // Anti-AutoTotem
+// Event to detect when a player uses a totem of undying (resurrection event)
+    @EventHandler
+    public void onPlayerResurrect(EntityResurrectEvent event) {
+        if (!(event.getEntity() instanceof Player)) return;
+        Player player = (Player) event.getEntity();
+
+        // Check if the totem was used to resurrect the player
+        if (event.isCancelled() || player.getInventory().getItemInOffHand().getType() != Material.TOTEM_OF_UNDYING) {
+            return;
+        }
+
+        UUID playerUUID = player.getUniqueId();
+        long currentTime = System.currentTimeMillis();
+
+        // Get config values
+        long totemUsageThreshold = config.getLong("totem_usage_threshold");
+        int maxViolations = config.getInt("max_violations");
+        String violationMessage = config.getString("violation_message").replace("{player}", player.getName());
+        String actionOnViolation = config.getString("action_on_violation");
+
+        // Check if the player used a totem recently
+        if (lastTotemUse.containsKey(playerUUID)) {
+            long lastUseTime = lastTotemUse.get(playerUUID);
+            long timeDiff = currentTime - lastUseTime;
+
+            if (timeDiff < totemUsageThreshold) {
+                // Player flagged for AutoTotem usage
+                Bukkit.getLogger().info(player.getName() + " might be using AutoTotem! Time between uses: " + timeDiff + "ms");
+
+                // Increment the player's violation count
+                int currentViolations = violationCount.getOrDefault(playerUUID, 0) + 1;
+                violationCount.put(playerUUID, currentViolations);
+
+                // Send message to the player
+                player.sendMessage(violationMessage);
+
+                // Check if the player exceeds max violations
+                if (currentViolations >= maxViolations) {
+                    handleViolationAction(player, actionOnViolation);
+                }
+
+                // Notify admins
+                if (actionOnViolation.equalsIgnoreCase("NOTIFY_ADMIN")) {
+                    String adminNotification = config.getString("admin_notification").replace("{player}", player.getName());
+                    notifyAdmins(adminNotification);
+                }
+
+                // Log the event if enabled
+                if (config.getBoolean("log_to_file")) {
+                    logToFile(player, timeDiff);
+                }
+
+                // Optionally broadcast to all players
+                if (config.getBoolean("broadcast_to_all_players")) {
+                    String broadcastMessage = config.getString("broadcast_message").replace("{player}", player.getName());
+                    Bukkit.broadcastMessage(broadcastMessage);
+                }
+            }
+        }
+
+        // Update the last totem use time for this player
+        lastTotemUse.put(playerUUID, currentTime);
+    }
+
+    // Event to track when players switch items (monitor for totem switches)
+    @EventHandler
+    public void onItemSwitch(PlayerItemHeldEvent event) {
+        Player player = event.getPlayer();
+        ItemStack newItem = player.getInventory().getItem(event.getNewSlot());
+
+        if (newItem != null && newItem.getType() == Material.TOTEM_OF_UNDYING) {
+            lastTotemUse.put(player.getUniqueId(), System.currentTimeMillis());
+        }
+    }
+
+    // Event to detect inventory click and item movement (for manual totem placement)
+    @EventHandler
+    public void onInventoryClick(InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player)) return;
+        Player player = (Player) event.getWhoClicked();
+
+        ItemStack currentItem = event.getCurrentItem();
+        ItemStack cursorItem = event.getCursor();
+
+        // Check if the player moves a totem into their off-hand slot
+        if (currentItem != null && currentItem.getType() == Material.TOTEM_OF_UNDYING ||
+                cursorItem != null && cursorItem.getType() == Material.TOTEM_OF_UNDYING) {
+
+            lastTotemUse.put(player.getUniqueId(), System.currentTimeMillis());
+        }
+    }
+
+    // Handle violation actions based on config settings
+    private void handleViolationAction(Player player, String action) {
+        switch (action.toUpperCase()) {
+            case "KICK":
+                player.kickPlayer("You have been kicked for suspected AutoTotem usage.");
+                break;
+            case "BAN":
+                Bukkit.getBanList(org.bukkit.BanList.Type.NAME).addBan(player.getName(), "Banned for AutoTotem usage", null, null);
+                player.kickPlayer("You have been banned for AutoTotem usage.");
+                break;
+            case "NOTIFY_ADMIN":
+                // Already handled in the resurrect event
+                break;
+            default:
+                // No action
+                break;
+        }
+    }
+
+    // Notify all online admins
+    private void notifyAdmins(String message) {
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (player.hasPermission("anticheat.notify")) {
+                player.sendMessage(message);
+            }
+        }
+    }
+
+    // Log suspicious totem usage to a file
+    private void logToFile(Player player, long timeDiff) {
+        // Logging logic (write to a custom file, e.g., logs/anticheat-autototem.log)
+        Bukkit.getLogger().info("Logging AutoTotem event for " + player.getName() + ". Time between uses: " + timeDiff + "ms");
+    }
+
+
 
     // Anti-AutoClicker Detection
     @EventHandler
