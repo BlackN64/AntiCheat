@@ -118,7 +118,7 @@ public class AntiKillaura implements Listener {
         Bukkit.getLogger().info("Killaura detected from player: " + player.getName());
         if (AntiCheat.getInstance().getConfig().getBoolean("anti-killaura.logging.notify-admins")) {
             // Notify admins or do something else based on your logic
-            Bukkit.broadcastMessage("Admin Alert: Killaura detected from player " + player.getName());
+            Bukkit.broadcastMessage(ChatUtils.colorize("&f&l[VoidAntiCheat] &cAdmin Alert: Killaura detected from player " + player.getName()));
         }
     }
 }
