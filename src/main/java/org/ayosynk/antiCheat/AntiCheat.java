@@ -13,9 +13,7 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityRegainHealthEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
-import org.bukkit.event.player.PlayerMoveEvent;
-import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.event.player.PlayerRespawnEvent;
+import org.bukkit.event.player.*;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.block.Block;
 import org.bukkit.enchantments.Enchantment;
@@ -25,7 +23,6 @@ import org.bukkit.event.block.Action;
 import org.bukkit.Location;
 import org.bukkit.event.entity.EntityResurrectEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.player.PlayerItemHeldEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.Material;
 import org.bukkit.Bukkit;
@@ -57,13 +54,22 @@ public class AntiCheat extends JavaPlugin implements Listener {
     private Map<Player, Long> lastAttackTime = new HashMap<>();
     private final HashMap<UUID, Long> lastTotemUse = new HashMap<>();
     private final HashMap<UUID, Integer> violationCount = new HashMap<>();
+    private final Map<UUID, Long> totemEquipTime = new HashMap<>();
+    private final Map<Player, Long> lastClickTime = new HashMap<>();
+    private final HashMap<UUID, Long> lastTotemUsage = new HashMap<>();
 
+    public static AntiCheat getInstance() {
+        return null;
+    }
 
     @Override
     public void onEnable() {
+        this.getCommand("anticheat").setExecutor(this);
         saveDefaultConfig(); // Saves the default config if it does not exist
         config = getConfig();
 
+        getServer().getPluginManager().registerEvents(new AntiTotem(config), this);
+        getServer().getPluginManager().registerEvents(new AntiKillaura(config), this);
 
         // Register event listener
         getServer().getPluginManager().registerEvents(this, this);
@@ -75,6 +81,7 @@ public class AntiCheat extends JavaPlugin implements Listener {
     @Override
     public void onDisable() {
         getLogger().info("AntiCheat plugin disabled!");
+
     }
 
     // Commands
@@ -94,81 +101,8 @@ public class AntiCheat extends JavaPlugin implements Listener {
         return false;
     }
 
-    // Anti-Killaura Detection
-    @EventHandler
-    public void onPlayerAttack(EntityDamageByEntityEvent event) {
-        if (event.getDamager() instanceof Player && event.getEntity() instanceof Player) {
-            Player attacker = (Player) event.getDamager();
-            Player target = (Player) event.getEntity();
-            double damage = event.getDamage();
-            long currentTime = System.currentTimeMillis();
 
-            // Check for excessive damage
-            if (damage > config.getDouble("maxDamagePerHit", 10.0)) {
-                incrementViolation(attacker, "Killaura Detected (Excessive Damage)");
-            }
-
-            // Check for suspicious attack speeds
-            long lastAttack = lastAttackTime.getOrDefault(attacker, 0L);
-            if ((currentTime - lastAttack) < config.getInt("killaura.attackSpeedThreshold", 200)) {
-                incrementViolation(attacker, "Killaura Detected (Suspicious Attack Speed)");
-            }
-            lastAttackTime.put(attacker, currentTime);
-
-            // Track hits
-            int hits = hitCount.getOrDefault(attacker, 0);
-            hits++;
-            hitCount.put(attacker, hits);
-
-            // Check for impossible angles of attack
-            double angle = attacker.getLocation().getDirection().angle(target.getLocation().getDirection());
-            if (angle > config.getDouble("killaura.maxAttackAngle", 60.0)) {
-                incrementViolation(attacker, "Killaura Detected (Impossible Attack Angle)");
-            }
-
-            // Check for multi-entity hits
-            if (hits > config.getInt("killaura.multiHitThreshold", 2)) {
-                incrementViolation(attacker, "Killaura Detected (Multi-Entity Hits)");
-            }
-
-            // Check for reach
-            double reachDistance = attacker.getLocation().distance(target.getLocation());
-            if (reachDistance > config.getDouble("killaura.maxReach", 4.0)) {
-                incrementViolation(attacker, "Killaura Detected (Excessive Reach)");
-            }
-
-            // Abnormal head movement
-            float yawDifference = Math.abs(attacker.getLocation().getYaw() - target.getLocation().getYaw());
-            if (yawDifference > config.getDouble("killaura.maxYawDifference", 180.0)) {
-                incrementViolation(attacker, "Killaura Detected (Abnormal Head Movement)");
-            }
-
-            // Reset hit count after a certain time frame
-            if (currentTime - lastAttack > 1000) {
-                hitCount.put(attacker, 0);
-            }
-        }
-    }
-  //movement
-    private void handleMovementCheck(Player player, double x, double y, double z) {
-        Location lastlocation = lastPlayerLocation.get(player);
-        Location newLocation = new Location(player.getWorld(), x, y, z);
-
-        if (lastlocation != null) {
-            double distance = lastlocation.distance(newLocation);
-            long currentTime = System.currentTimeMillis();
-            long timeElapsed = System.currentTimeMillis() - playerLastMoveTime.getOrDefault(player, System.currentTimeMillis());
-
-            if (distance > config.getDouble("maxAllowedDistance", 5.0) && timeElapsed < 50) {
-                incrementViolation(player, "Suspicious Movement (Speed/Fly Hack Detected)");
-            }
-        }
-
-        lastPlayerLocation.put(player, newLocation);
-        playerLastMoveTime.put(player, System.currentTimeMillis());
-    }
-
-    @EventHandler
+@EventHandler
     public void onPlayerDeath(PlayerDeathEvent event) {
         Player player = event.getEntity();
         noFallCheck.remove(player);
@@ -220,132 +154,68 @@ public class AntiCheat extends JavaPlugin implements Listener {
     }
 
     // Anti-AutoTotem
-// Event to detect when a player uses a totem of undying (resurrection event)
     @EventHandler
-    public void onPlayerResurrect(EntityResurrectEvent event) {
+    public void onPlayerDamage(EntityDamageEvent event) {
         if (!(event.getEntity() instanceof Player)) return;
+
         Player player = (Player) event.getEntity();
+        double healthBefore = player.getHealth();
+        double damage = event.getDamage();
+        double healthAfter = healthBefore - damage;
 
-        // Check if the totem was used to resurrect the player
-        if (event.isCancelled() || player.getInventory().getItemInOffHand().getType() != Material.TOTEM_OF_UNDYING) {
-            return;
-        }
+        // Check if the AutoTotem detection is enabled
+        if (config.getBoolean("general.enableAutoTotemDetection") && healthAfter <= 0) {
+            long currentTime = System.currentTimeMillis();
+            if (lastTotemUsage.containsKey(player.getUniqueId())) {
+                long lastUsed = lastTotemUsage.get(player.getUniqueId());
+                long rapidUsageThreshold = config.getLong("AutoTotem.rapidUsageThreshold");
 
-        UUID playerUUID = player.getUniqueId();
-        long currentTime = System.currentTimeMillis();
-
-        // Get config values
-        long totemUsageThreshold = config.getLong("totem_usage_threshold");
-        int maxViolations = config.getInt("max_violations");
-        String violationMessage = config.getString("violation_message").replace("{player}", player.getName());
-        String actionOnViolation = config.getString("action_on_violation");
-
-        // Check if the player used a totem recently
-        if (lastTotemUse.containsKey(playerUUID)) {
-            long lastUseTime = lastTotemUse.get(playerUUID);
-            long timeDiff = currentTime - lastUseTime;
-
-            if (timeDiff < totemUsageThreshold) {
-                // Player flagged for AutoTotem usage
-                Bukkit.getLogger().info(player.getName() + " might be using AutoTotem! Time between uses: " + timeDiff + "ms");
-
-                // Increment the player's violation count
-                int currentViolations = violationCount.getOrDefault(playerUUID, 0) + 1;
-                violationCount.put(playerUUID, currentViolations);
-
-                // Send message to the player
-                player.sendMessage(violationMessage);
-
-                // Check if the player exceeds max violations
-                if (currentViolations >= maxViolations) {
-                    handleViolationAction(player, actionOnViolation);
-                }
-
-                // Notify admins
-                if (actionOnViolation.equalsIgnoreCase("NOTIFY_ADMIN")) {
-                    String adminNotification = config.getString("admin_notification").replace("{player}", player.getName());
-                    notifyAdmins(adminNotification);
-                }
-
-                // Log the event if enabled
-                if (config.getBoolean("log_to_file")) {
-                    logToFile(player, timeDiff);
-                }
-
-                // Optionally broadcast to all players
-                if (config.getBoolean("broadcast_to_all_players")) {
-                    String broadcastMessage = config.getString("broadcast_message").replace("{player}", player.getName());
-                    Bukkit.broadcastMessage(broadcastMessage);
+                // Check for rapid totem use
+                if (currentTime - lastUsed < rapidUsageThreshold) {
+                    // Trigger violation
+                    triggerViolation(player, config.getString("AutoTotem.violationMessage"));
                 }
             }
         }
-
-        // Update the last totem use time for this player
-        lastTotemUse.put(playerUUID, currentTime);
     }
 
-    // Event to track when players switch items (monitor for totem switches)
     @EventHandler
-    public void onItemSwitch(PlayerItemHeldEvent event) {
-        Player player = event.getPlayer();
-        ItemStack newItem = player.getInventory().getItem(event.getNewSlot());
-
-        if (newItem != null && newItem.getType() == Material.TOTEM_OF_UNDYING) {
-            lastTotemUse.put(player.getUniqueId(), System.currentTimeMillis());
+    public void onPlayerUseTotem(PlayerItemConsumeEvent event) {
+        if (event.getItem().getType() == Material.TOTEM_OF_UNDYING) {
+            lastTotemUsage.put(event.getPlayer().getUniqueId(), System.currentTimeMillis());
         }
     }
 
-    // Event to detect inventory click and item movement (for manual totem placement)
-    @EventHandler
-    public void onInventoryClick(InventoryClickEvent event) {
-        if (!(event.getWhoClicked() instanceof Player)) return;
-        Player player = (Player) event.getWhoClicked();
+    private void triggerViolation(Player player, String violationMessage) {
+        // Display violation message to the player
+        player.sendMessage(violationMessage);
 
-        ItemStack currentItem = event.getCurrentItem();
-        ItemStack cursorItem = event.getCursor();
-
-        // Check if the player moves a totem into their off-hand slot
-        if (currentItem != null && currentItem.getType() == Material.TOTEM_OF_UNDYING ||
-                cursorItem != null && cursorItem.getType() == Material.TOTEM_OF_UNDYING) {
-
-            lastTotemUse.put(player.getUniqueId(), System.currentTimeMillis());
+        // Optionally log the violation
+        if (config.getBoolean("general.logViolations")) {
+            // Log to console
+            System.out.println("Player " + player.getName() + " triggered a violation: " + violationMessage);
         }
-    }
 
-    // Handle violation actions based on config settings
-    private void handleViolationAction(Player player, String action) {
-        switch (action.toUpperCase()) {
-            case "KICK":
-                player.kickPlayer("You have been kicked for suspected AutoTotem usage.");
-                break;
-            case "BAN":
-                Bukkit.getBanList(org.bukkit.BanList.Type.NAME).addBan(player.getName(), "Banned for AutoTotem usage", null, null);
-                player.kickPlayer("You have been banned for AutoTotem usage.");
-                break;
-            case "NOTIFY_ADMIN":
-                // Already handled in the resurrect event
-                break;
-            default:
-                // No action
-                break;
-        }
-    }
-
-    // Notify all online admins
-    private void notifyAdmins(String message) {
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            if (player.hasPermission("anticheat.notify")) {
-                player.sendMessage(message);
+        // Handle actions based on the config
+        for (var action : config.getConfigurationSection("violationHandling.actions").getKeys(false)) {
+            String actionType = config.getString("violationHandling.actions." + action + ".action");
+            switch (actionType.toLowerCase()) {
+                case "kick":
+                    String kickMessage = config.getString("violationHandling.actions." + action + ".message");
+                    player.kickPlayer(kickMessage);
+                    break;
+                case "ban":
+                    long banDuration = config.getLong("violationHandling.actions." + action + ".duration");
+                    String banReason = config.getString("violationHandling.actions." + action + ".reason");
+                    // Implement the ban logic here (you may need to use an external library or method)
+                    break;
+                default:
+                    // Handle other actions or log an unsupported action
+                    System.out.println("Unsupported action: " + actionType);
+                    break;
             }
         }
     }
-
-    // Log suspicious totem usage to a file
-    private void logToFile(Player player, long timeDiff) {
-        // Logging logic (write to a custom file, e.g., logs/anticheat-autototem.log)
-        Bukkit.getLogger().info("Logging AutoTotem event for " + player.getName() + ". Time between uses: " + timeDiff + "ms");
-    }
-
 
 
     // Anti-AutoClicker Detection
@@ -369,6 +239,13 @@ public class AntiCheat extends JavaPlugin implements Listener {
                 }
             } else {
                 clickCount.put(player, 1);
+            }
+        }
+
+        // Track legitimate left-clicks by the player
+        if (config.getBoolean("antiKillaura.enabled")) {
+            if (event.getAction().toString().contains("LEFT_CLICK")) {
+                lastClickTime.put(event.getPlayer(), System.currentTimeMillis());
             }
         }
     }

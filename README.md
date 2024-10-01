@@ -3,7 +3,7 @@
 ## Overview
 The AntiCheat plugin for Minecraft is designed to enhance server security by detecting and preventing common hacks, cheats, and exploits. This plugin is built for Paper/Spigot and offers a variety of detection mechanisms, including anti-killaura, anti-fly, anti-speed, anti-autoclicker, and more. It helps maintain a fair gaming environment by notifying admins of suspicious activity and taking action against offenders.
 ## Bugs and Issues
-I know there is some bugs and issues. im trying to fix those issues as soon as possible. you can check the source codee in my [GitHub](https://Github.com/synkfr/ANtiCheat) page.
+I know there is some bugs and issues. im trying to fix those issues as soon as possible. you can check the source codee in my [GitHub](https://Github.com/synkfr/ANtiCheat) page. Some hack Client can have advanced killaura functionalities that simulate more natural player behavior, making them harder to detect. If players are using smart configurations that mimic legitimate player movement and attack patterns, it could evade detection. The detection system will require real-world testing. Monitor flagged players and analyze false positives. Adjust the config.yml accordingly.
 
 ## Features
 - **Anti-Fly Detection**: Prevents players from using fly hacks.
