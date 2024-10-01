@@ -76,8 +76,13 @@ public class AntiCheat extends JavaPlugin implements Listener {
         antiTotem = new AntiTotem(this);  // 'this' refers to the AntiCheat plugin instance
         // Register events from AntiTotem
         Bukkit.getPluginManager().registerEvents(antiTotem, this);
-        getServer().getPluginManager().registerEvents(antiKillaura, this);
-        AntiKillaura antiKillaura = new AntiKillaura(getConfig());
+        getServer().getPluginManager().registerEvents(new AntiKillaura(this), this);
+        if (antiKillaura != null) {
+            getServer().getPluginManager().registerEvents(antiKillaura, this);
+            getLogger().info("AntiKillaura events registered.");
+        } else {
+            getLogger().info("Failed to initialize AntiKillaura.");
+        }
 
         // Register event listener
         getServer().getPluginManager().registerEvents(this, this);
@@ -89,7 +94,6 @@ public class AntiCheat extends JavaPlugin implements Listener {
     @Override
     public void onDisable() {
         getLogger().info("AntiCheat plugin disabled!");
-
     }
 
     // Commands

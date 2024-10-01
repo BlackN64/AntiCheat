@@ -6,60 +6,67 @@
 # AntiCheat AutoTotem Configuration
 
 autototem:
-  # Minimum reaction time in milliseconds for totem usage to be considered valid
+
+  # Minimum time between using totems (in milliseconds)
   minReactionTime: 500
 
-  # Maximum number of totem uses allowed within a certain time frame (in milliseconds)
+  # Max totem uses in a given time frame
   maxTotemUsesPerTimeFrame: 3
+  # Time frame in milliseconds to track usage
   totemTimeFrame: 5000
 
-  # Penalty system for suspicious activity
   violationThresholds:
 
-    # Number of violations before a warning is given
-    warning: 3
-    # Number of violations before player is kicked
-    kick: 5
-    # Number of violations before player is banned
-    ban: 10
+    warning: 3 # warns the player
+    kick: 5 # kicks the player
+    ban: 10 # bans the player
 
-  # Messages to send to players
   messages:
-    warning: "&f&l[VoidAntiCheat] &cSuspicious totem usage detected! Slow down!"
-    kick: "&cYou have been kicked for using AutoTotem hacks."
-    ban: "&cYou have been banned for AutoTotem exploits."
+    warning: '&f&l[VoidAntiCheat] &eWarning: Suspicious totem usage detected!'
+    kick: '&cYou have been kicked for using totems too fast.'
+    ban: '&4You have been banned for using totems too fast.'
 
-  # Admin notifications
+  # if sets to "true" then the admin/op gets a message
   notifyAdmins: true
-  adminNotificationMessage: "&f&l[VoidAntiCheat] %player% has been flagged for AutoTotem abuse."
+  debug: false # gives console message
 
-  # Debug mode to log additional details for plugin debugging
-  debug: false
+  # Admin/OP gets a message
+  adminNotificationMessage: '&c[AntiTotem] %player% has been %action% for totem abuse.'
+
 
 
 # ============================
 #        Anti-Killaura
 # ============================
-# Configuration for AntiKillaura
+# Configuration for Anti-Killaura
 
 anti-killaura:
 
-  # Max angle for direction change (degrees)
-  max-attack-angle: 45
+  # Attack frequency detection
+  # Max attacks per second before detection
+  max-attack-frequency: 4.0
 
-  # Max speed the player can move (adjust based on your needs)
-  max-movement-speed: 1.3
+  # Min time between attacks in milliseconds
+  minimum-attack-interval: 200
 
-  # Minimum time between attacks in milliseconds
-  minimum-attack-interval: 150
+  # Aim detection
+  # Default is "60". it's important to set this properly
+  # Max angle difference between player's aim and target
+  max-aim-angle: 60.0
 
-  kick-message: "Killaura detected! You have been kicked."
+  # Warnings and kicking
+  # Number of warnings before the player is kicked
+  max-warnings: 3
+  #warning message
+  warning-message: '&f&l[VoidANtiCheat] &cWarning: Suspicious behavior detected! You have &d{warnings_left} &cwarnings left before being kicked.'
+
+  # Kick message
+  kick-message: '&cYou have been kicked for suspected Killaura usage!'
+
+  # Logging
   logging:
-    # Whether to log detections in the console
-    log-detections: true
-
-    # Whether to notify admins when a player is kicked
-    notify-admins: true
+    notify-admins: true # Notify admins when Killaura is detected
+    log-to-console: false # Log detection in the console
 
 
 # ============================

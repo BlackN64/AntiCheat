@@ -1,136 +1,99 @@
 package org.ayosynk.antiCheat;
 
 import org.bukkit.Bukkit;
-import org.bukkit.Location;
+import org.bukkit.ChatColor;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
-import org.bukkit.event.player.PlayerMoveEvent;
-import org.bukkit.util.Vector;
 
 import java.util.HashMap;
 import java.util.Map;
 
 public class AntiKillaura implements Listener {
 
-    private final Map<Player, Long> lastAttackTimes = new HashMap<>();
-    private final Map<Player, Location> lastLocations = new HashMap<>();
-    private final FileConfiguration config;
-
-    private final double maxMovementSpeed;
-    private final double maxAttackAngle;
+    private final AntiCheat plugin;
+    private final Map<Player, AttackData> attackDataMap = new HashMap<>();
+    private final double maxAttackFrequency;
+    private final double maxAimAngle;
     private final int minAttackInterval;
+    private final int maxWarnings;
 
-
-    public AntiKillaura(FileConfiguration config) {
-        this.config = config;
-        this.maxMovementSpeed = config.getDouble("anti-killaura.max-movement-speed");
-        this.maxAttackAngle = config.getDouble("anti-killaura.max-attack-angle");
-        this.minAttackInterval = config.getInt("anti-killaura.minimum-attack-interval");
+    public AntiKillaura(AntiCheat plugin) {
+        this.plugin = plugin;
+        FileConfiguration config = plugin.getConfig();
+        this.maxAttackFrequency = config.getDouble("anti-killaura.max-attack-frequency", 4.0);
+        this.maxAimAngle = config.getDouble("anti-killaura.max-aim-angle", 60.0);
+        this.minAttackInterval = config.getInt("anti-killaura.minimum-attack-interval", 200);
+        this.maxWarnings = config.getInt("anti-killaura.max-warnings", 3); // Number of warnings before kick
     }
 
     @EventHandler
     public void onPlayerAttack(EntityDamageByEntityEvent event) {
         if (event.getDamager() instanceof Player) {
             Player attacker = (Player) event.getDamager();
+            Entity target = event.getEntity();
             long currentTime = System.currentTimeMillis();
 
-            // Check if the attack is suspicious based on the config values
-            if (lastAttackTimes.containsKey(attacker)) {
-                long lastAttackTime = lastAttackTimes.get(attacker);
-                if (currentTime - lastAttackTime < AntiCheat.getInstance().getConfig().getInt("anti-killaura.minimum-attack-interval")) {
-                    // Player is attacking too quickly, could be killaura
-                    handleKillauraDetection(attacker);
-                }
+            AttackData data = attackDataMap.getOrDefault(attacker, new AttackData(0, 0, 0));
+            long lastAttackTime = data.getLastAttackTime();
+            int attackCount = data.getAttackCount();
+            int warningCount = data.getWarningCount();
+
+            // Check attack frequency
+            if (currentTime - lastAttackTime < minAttackInterval) {
+                attackCount++;
+            } else {
+                attackCount = 1; // Reset if too much time has passed
             }
 
-            // Update last attack time
-            lastAttackTimes.put(attacker, currentTime);
+            data.setLastAttackTime(currentTime);
+            data.setAttackCount(attackCount);
+            attackDataMap.put(attacker, data);
+
+            // Check aim angle
+            double aimAngle = DetectionUtils.getAimAngle(attacker, target);
+            if (aimAngle > maxAimAngle) {
+                issueWarningOrKick(attacker, data, "Suspicious aim angle: " + aimAngle);
+                return;
+            }
+
+            // Check if the attack frequency exceeds the limit
+            if (DetectionUtils.isExcessiveAttacking(attackCount, maxAttackFrequency)) {
+                issueWarningOrKick(attacker, data, "Excessive attack speed detected.");
+            }
         }
     }
 
-    @EventHandler
-    public void onPlayerMove(PlayerMoveEvent event) {
-        Player player = event.getPlayer();
-        Location newLocation = event.getTo();
+    private void issueWarningOrKick(Player player, AttackData data, String reason) {
+        int warningCount = data.getWarningCount();
 
-        if (lastLocations.containsKey(player)) {
-            Location lastLocation = lastLocations.get(player);
-            updateMovement(lastLocation, newLocation, player);
-        }
-
-        // Update the player's last known location
-        lastLocations.put(player, newLocation);
-    }
-
-    public void updateMovement(Location lastLocation, Location newLocation, Player player) {
-        // Calculate the movement vector
-        Vector movement = newLocation.toVector().subtract(lastLocation.toVector());
-        double distance = movement.length();
-
-        // Check if the player moved too quickly
-        if (distance > AntiCheat.getInstance().getConfig().getDouble("anti-killaura.max-movement-speed")) {
-            handleKillauraDetection(player);
-            return; // No need to check further
-        }
-
-        // Calculate the angle of movement
-        double angle = getAttackAngle(lastLocation, newLocation);
-
-        // Check for sudden direction changes (example threshold can be 45 degrees)
-        if (angle > AntiCheat.getInstance().getConfig().getDouble("anti-killaura.max-attack-angle")) {
-            handleKillauraDetection(player);
-            return; // No need to check further
-        }
-
-        // Track the player's last movement direction
-        Vector lastDirection = lastLocation.getDirection();
-        Vector newDirection = movement.normalize(); // Normalize to get the direction vector
-
-        // Check for erratic movement
-        if (isErraticMovement(lastDirection, newDirection)) {
-            handleKillauraDetection(player);
-        }
-
-        // Update the last movement direction for the next check
-        lastLocations.put(player, newLocation);
-    }
-
-    // Helper method to determine if the player's movement is erratic
-    private boolean isErraticMovement(Vector lastDirection, Vector newDirection) {
-        // Define a threshold for direction change (e.g., 0.5)
-        double threshold = 0.5;
-
-        // Calculate the dot product to see how aligned the vectors are
-        double dotProduct = lastDirection.dot(newDirection);
-
-        // If the dot product is below the threshold, it indicates erratic movement
-        return dotProduct < threshold;
-    }
-
-
-    private double getAttackAngle(Location lastLocation, Location newLocation) {
-        Vector lastVector = lastLocation.getDirection();
-        Vector newVector = newLocation.getDirection();
-
-        // Calculate the angle between the two direction vectors
-        double angle = Math.toDegrees(Math.acos(lastVector.dot(newVector) / (lastVector.length() * newVector.length())));
-        return angle;
-    }
-
-    private void handleKillauraDetection(Player player) {
-        // Handle killaura detection (e.g., kick player, log detection, notify admins)
-        player.kickPlayer(AntiCheat.getInstance().getConfig().getString("anti-killaura.kick-message"));
-        Bukkit.getLogger().info("Killaura detected from player: " + player.getName());
-        if (AntiCheat.getInstance().getConfig().getBoolean("anti-killaura.logging.notify-admins")) {
-            // Notify admins or do something else based on your logic
-            Bukkit.broadcastMessage(ChatUtils.colorize("&f&l[VoidAntiCheat] &cAdmin Alert: Killaura detected from player " + player.getName()));
+        if (warningCount >= maxWarnings) {
+            kickPlayerForKillaura(player, reason);
+        } else {
+            warningCount++;
+            data.setWarningCount(warningCount);
+            attackDataMap.put(player, data);
+            warnPlayer(player, reason, warningCount);
         }
     }
 
-    public FileConfiguration getConfig() {
-        return config;
+    private void warnPlayer(Player player, String reason, int warningCount) {
+        String warningMessage = plugin.getConfig().getString("anti-killaura.warning-message")
+                .replace("{warnings_left}", String.valueOf(maxWarnings - warningCount));
+        player.sendMessage(ChatColor.translateAlternateColorCodes('&', warningMessage));
+        Bukkit.getLogger().info("Warning issued to player: " + player.getName() + ". Reason: " + reason);
+    }
+
+    private void kickPlayerForKillaura(Player player, String reason) {
+        Bukkit.getLogger().info("Killaura detection triggered for player: " + player.getName() + ". Reason: " + reason);
+        player.kickPlayer(ChatColor.translateAlternateColorCodes('&', plugin.getConfig().getString("anti-killaura.kick-message")));
+
+        if (plugin.getConfig().getBoolean("anti-killaura.logging.notify-admins")) {
+            Bukkit.broadcastMessage(ChatColor.translateAlternateColorCodes('&',
+                    "&f&l[VoidAntiCheat] &cAdmin Alert: Killaura detected from player " + player.getName()));
+        }
     }
 }
