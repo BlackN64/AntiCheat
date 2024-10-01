@@ -15,9 +15,13 @@ autototem:
 
   # Penalty system for suspicious activity
   violationThresholds:
-    warning: 3        # Number of violations before a warning is given
-    kick: 5           # Number of violations before player is kicked
-    ban: 10           # Number of violations before player is banned
+
+    # Number of violations before a warning is given
+    warning: 3
+    # Number of violations before player is kicked
+    kick: 5
+    # Number of violations before player is banned
+    ban: 10
 
   # Messages to send to players
   messages:

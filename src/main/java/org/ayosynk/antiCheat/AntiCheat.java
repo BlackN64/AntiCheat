@@ -58,8 +58,12 @@ public class AntiCheat extends JavaPlugin implements Listener {
     private final Map<Player, Long> lastClickTime = new HashMap<>();
     private final HashMap<UUID, Long> lastTotemUsage = new HashMap<>();
 
+    private static AntiCheat instance;
+    private AntiTotem antiTotem;
+    private AntiKillaura antiKillaura;
+
     public static AntiCheat getInstance() {
-        return null;
+        return instance;
     }
 
     @Override
@@ -67,9 +71,13 @@ public class AntiCheat extends JavaPlugin implements Listener {
         this.getCommand("anticheat").setExecutor(this);
         saveDefaultConfig(); // Saves the default config if it does not exist
         config = getConfig();
+        instance = this;
 
-        getServer().getPluginManager().registerEvents(new AntiTotem(config), this);
-        getServer().getPluginManager().registerEvents(new AntiKillaura(config), this);
+        antiTotem = new AntiTotem(this);  // 'this' refers to the AntiCheat plugin instance
+        // Register events from AntiTotem
+        Bukkit.getPluginManager().registerEvents(antiTotem, this);
+        getServer().getPluginManager().registerEvents(antiKillaura, this);
+        AntiKillaura antiKillaura = new AntiKillaura(getConfig());
 
         // Register event listener
         getServer().getPluginManager().registerEvents(this, this);
@@ -91,7 +99,8 @@ public class AntiCheat extends JavaPlugin implements Listener {
             if (args.length > 0 && args[0].equalsIgnoreCase("reload")) {
                 reloadConfig();
                 config = this.getConfig();
-                sender.sendMessage(ChatUtils.colorize("&aAntiCheat configuration reloaded."));
+                sender.sendMessage(ChatUtils.colorize("&f&l[VoidAntiCheat] &aconfiguration reloaded."));
+                sender.sendMessage(ChatUtils.colorize("&f&l[VoidAntiCheat] &eServer Restart is Recommended."));
                 return true;
             } else {
                 sender.sendMessage(ChatUtils.colorize("&cUsage: /anticheat reload"));

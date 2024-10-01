@@ -3,79 +3,59 @@
 # ============================
 #         AUTO TOTEM
 # ============================
-# AntiCheat Configuration
+# AntiCheat AutoTotem Configuration
 
-# Configuration for AutoTotem detection
-AutoTotem:
-  # Time in milliseconds to check for rapid totem usage
-  rapidUsageThreshold: 50
+autototem:
+  # Minimum reaction time in milliseconds for totem usage to be considered valid
+  minReactionTime: 500
 
-  # Message to display when a violation is triggered
-  violationMessage: "AutoTotem hack suspected! Please stop using exploits."
+  # Maximum number of totem uses allowed within a certain time frame (in milliseconds)
+  maxTotemUsesPerTimeFrame: 3
+  totemTimeFrame: 5000
 
-  # List of players exempt from AutoTotem checks (for testing purposes)
-  exemptPlayers:
-    - "playerUUID1" # Replace with actual player UUIDs
-    - "playerUUID2"
+  # Penalty system for suspicious activity
+  violationThresholds:
+    warning: 3        # Number of violations before a warning is given
+    kick: 5           # Number of violations before player is kicked
+    ban: 10           # Number of violations before player is banned
 
-# General settings
-general:
-  # Enable or disable the AutoTotem detection feature
-  enableAutoTotemDetection: true
+  # Messages to send to players
+  messages:
+    warning: "&f&l[VoidAntiCheat] &cSuspicious totem usage detected! Slow down!"
+    kick: "&cYou have been kicked for using AutoTotem hacks."
+    ban: "&cYou have been banned for AutoTotem exploits."
 
-  # Log violations to console
-  logViolations: true
+  # Admin notifications
+  notifyAdmins: true
+  adminNotificationMessage: "&f&l[VoidAntiCheat] %player% has been flagged for AutoTotem abuse."
 
-  # Admin notification settings
-  adminNotification:
-    # Enable or disable admin notifications
-    enabled: true
-
-    # Message to notify admins of violations
-    notificationMessage: "Player {player} has triggered a violation: {violation}"
-
-# Violation handling
-violationHandling:
-  # Action to take when a violation is detected
-  actions:
-    - action: "kick"
-      message: "You have been kicked for using hacks!"
-      # Optional: specify a cooldown time before the player can rejoin
-      cooldown: 600 # in seconds (10 minutes)
-
-    - action: "ban"
-      duration: 86400 # in seconds (1 day)
-      reason: "Hacking - AutoTotem usage detected"
-
+  # Debug mode to log additional details for plugin debugging
+  debug: false
 
 
 # ============================
 #        Anti-Killaura
 # ============================
-# Configuration for Anti-Killaura
+# Configuration for AntiKillaura
 
-antiKillaura:
-  # "true" means the Anti-Killaura is Enabled
-  # "false" means the Anti-Killaura is disabled
-  enabled: true
+anti-killaura:
 
-  # weapons that are is used for Killaura
-  allowedWeapons:
-    - DIAMOND_SWORD
-    - WOODEN_SWORD
-    - STONE_SWORD
-    - IRON_SWORD
-    - NETHERITE_SWORD
-    - AIR
+  # Max angle for direction change (degrees)
+  max-attack-angle: 45
 
-  clickThreshold: 300  # in milliseconds
+  # Max speed the player can move (adjust based on your needs)
+  max-movement-speed: 1.3
 
- # message that will send when Killaura is detected
-  violationMessage: "&cCheats are not allowed. &eKillaura &cdetected!"
+  # Minimum time between attacks in milliseconds
+  minimum-attack-interval: 150
 
-  violationActions:
-    - "notify"  # Actions like notify, kick, ban, log can be configured
-  # - "kick"   # Add more actions like this if needed
+  kick-message: "Killaura detected! You have been kicked."
+  logging:
+    # Whether to log detections in the console
+    log-detections: true
+
+    # Whether to notify admins when a player is kicked
+    notify-admins: true
 
 
 # ============================
@@ -153,7 +133,7 @@ violationThresholds:
   ban: 5
 
 # Notification message format for admins
-notifyMessage: "&c%player% has been flagged for %reason%"
+notifyMessage: "&f&l[VoidAntiCheat] &e%player% &chas been flagged for %reason%"
 
 
 # More improvement well come soon and Thanks fo Downloading This plugin

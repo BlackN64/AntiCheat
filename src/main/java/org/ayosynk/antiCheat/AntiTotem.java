@@ -8,16 +8,15 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageEvent;
-import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.HashMap;
 import java.util.Map;
 
-public class AntiTotem extends JavaPlugin implements Listener {
+public class AntiTotem implements Listener {
 
+    private final AntiCheat plugin; // Reference to the main plugin
     private final Map<Player, Long> lastTotemUsage = new HashMap<>();
     private final Map<Player, Integer> playerViolations = new HashMap<>();
-    private final FileConfiguration config;
 
     private int minReactionTime;
     private int maxTotemUsesPerTimeFrame;
@@ -28,15 +27,15 @@ public class AntiTotem extends JavaPlugin implements Listener {
     private boolean notifyAdmins;
     private boolean debug;
 
-    public AntiTotem(FileConfiguration config) {
-        this.config = config;
+    // Constructor takes the AntiCheat plugin instance
+    public AntiTotem(AntiCheat plugin) {
+        this.plugin = plugin;
+        loadConfig();
     }
 
-
     private void loadConfig() {
-        FileConfiguration config = getConfig();
+        FileConfiguration config = plugin.getConfig();
 
-        // Load configuration values
         minReactionTime = config.getInt("autototem.minReactionTime", 500);
         maxTotemUsesPerTimeFrame = config.getInt("autototem.maxTotemUsesPerTimeFrame", 3);
         totemTimeFrame = config.getInt("autototem.totemTimeFrame", 5000);
@@ -75,26 +74,25 @@ public class AntiTotem extends JavaPlugin implements Listener {
         int violations = playerViolations.getOrDefault(player, 0) + 1;
         playerViolations.put(player, violations);
 
-        // Check thresholds for warnings, kicks, and bans
         if (violations >= banThreshold) {
-            player.kickPlayer(ChatColor.translateAlternateColorCodes('&', getConfig().getString("autototem.messages.ban")));
+            player.kickPlayer(ChatColor.translateAlternateColorCodes('&', plugin.getConfig().getString("autototem.messages.ban")));
             if (notifyAdmins) notifyAdmins(player, "ban");
         } else if (violations >= kickThreshold) {
-            player.kickPlayer(ChatColor.translateAlternateColorCodes('&', getConfig().getString("autototem.messages.kick")));
+            player.kickPlayer(ChatColor.translateAlternateColorCodes('&', plugin.getConfig().getString("autototem.messages.kick")));
             if (notifyAdmins) notifyAdmins(player, "kick");
         } else if (violations >= warningThreshold) {
-            player.sendMessage(ChatColor.translateAlternateColorCodes('&', getConfig().getString("autototem.messages.warning")));
+            player.sendMessage(ChatColor.translateAlternateColorCodes('&', plugin.getConfig().getString("autototem.messages.warning")));
             if (notifyAdmins) notifyAdmins(player, "warning");
         }
 
         if (debug) {
-            getLogger().info("Player " + player.getName() + " has " + violations + " violations.");
+            plugin.getLogger().info("Player " + player.getName() + " has " + violations + " violations.");
         }
     }
 
     private void notifyAdmins(Player player, String action) {
         String message = ChatColor.translateAlternateColorCodes('&',
-                getConfig().getString("autototem.adminNotificationMessage")
+                plugin.getConfig().getString("autototem.adminNotificationMessage")
                         .replace("%player%", player.getName())
                         .replace("%action%", action));
         for (Player admin : Bukkit.getOnlinePlayers()) {
@@ -102,10 +100,5 @@ public class AntiTotem extends JavaPlugin implements Listener {
                 admin.sendMessage(message);
             }
         }
-    }
-
-    @Override
-    public void onDisable() {
-        getLogger().info("AntiTotem plugin has been disabled.");
     }
 }

@@ -19,8 +19,16 @@ public class AntiKillaura implements Listener {
     private final Map<Player, Location> lastLocations = new HashMap<>();
     private final FileConfiguration config;
 
+    private final double maxMovementSpeed;
+    private final double maxAttackAngle;
+    private final int minAttackInterval;
+
+
     public AntiKillaura(FileConfiguration config) {
         this.config = config;
+        this.maxMovementSpeed = config.getDouble("anti-killaura.max-movement-speed");
+        this.maxAttackAngle = config.getDouble("anti-killaura.max-attack-angle");
+        this.minAttackInterval = config.getInt("anti-killaura.minimum-attack-interval");
     }
 
     @EventHandler
@@ -120,5 +128,9 @@ public class AntiKillaura implements Listener {
             // Notify admins or do something else based on your logic
             Bukkit.broadcastMessage(ChatUtils.colorize("&f&l[VoidAntiCheat] &cAdmin Alert: Killaura detected from player " + player.getName()));
         }
+    }
+
+    public FileConfiguration getConfig() {
+        return config;
     }
 }
